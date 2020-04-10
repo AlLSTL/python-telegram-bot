@@ -94,7 +94,9 @@ class Updater(object):
             more info, please see our wiki. Defaults to :obj:`True`.
 
     Note:
-        You must supply either a :attr:`bot` or a :attr:`token` argument.
+        * You must supply either a :attr:`bot` or a :attr:`token` argument.
+        * If you supply a :attr:`bot`, you will need to pass :attr:`defaults` to *both* the bot and
+          the :class:`telegram.ext.Updater`.
 
     Raises:
         ValueError: If both :attr:`token` and :attr:`bot` are passed or none of them.
@@ -574,9 +576,9 @@ class Updater(object):
         """Blocks until one of the signals are received and stops the updater.
 
         Args:
-            stop_signals (:obj:`iterable`): Iterable containing signals from the signal module that
-                should be subscribed to. Updater.stop() will be called on receiving one of those
-                signals. Defaults to (``SIGINT``, ``SIGTERM``, ``SIGABRT``).
+            stop_signals (:obj:`list` | :obj:`tuple`): List containing signals from the signal
+                module that should be subscribed to. Updater.stop() will be called on receiving one
+                of those signals. Defaults to (``SIGINT``, ``SIGTERM``, ``SIGABRT``).
 
         """
         for sig in stop_signals:

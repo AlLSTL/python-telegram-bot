@@ -29,12 +29,13 @@ import logging
 import os
 import pickle
 from collections import defaultdict
+from time import sleep
 
 import pytest
 
 from telegram import Update, Message, User, Chat, MessageEntity
 from telegram.ext import BasePersistence, Updater, ConversationHandler, MessageHandler, Filters, \
-    PicklePersistence, CommandHandler, DictPersistence, TypeHandler
+    PicklePersistence, CommandHandler, DictPersistence, TypeHandler, JobQueue
 
 
 @pytest.fixture(autouse=True)
@@ -93,6 +94,13 @@ def updater(bot, base_persistence):
     base_persistence.store_user_data = True
     base_persistence.store_callback_data = True
     return u
+
+
+@pytest.fixture(scope='function')
+def job_queue(bot):
+    jq = JobQueue()
+    yield jq
+    jq.stop()
 
 
 class TestBasePersistence(object):
@@ -1189,6 +1197,27 @@ class TestPickelPersistence(object):
         assert nested_ch.conversations[nested_ch._get_key(update)] == 1
         assert nested_ch.conversations == pickle_persistence.conversations['name3']
 
+    def test_with_job(self, job_queue, cdp, pickle_persistence):
+        def job_callback(context):
+            context.bot_data['test1'] = '456'
+            context.dispatcher.chat_data[123]['test2'] = '789'
+            context.dispatcher.user_data[789]['test3'] = '123'
+            context.dispatcher.callback_data['test1'] = 'test0'
+
+        cdp.persistence = pickle_persistence
+        job_queue.set_dispatcher(cdp)
+        job_queue.start()
+        job_queue.run_once(job_callback, 0.01)
+        sleep(0.05)
+        bot_data = pickle_persistence.get_bot_data()
+        assert bot_data == {'test1': '456'}
+        chat_data = pickle_persistence.get_chat_data()
+        assert chat_data[123] == {'test2': '789'}
+        user_data = pickle_persistence.get_user_data()
+        assert user_data[789] == {'test3': '123'}
+        callback_data = pickle_persistence.get_callback_data()
+        assert callback_data['test1'] == 'test0'
+
 
 @pytest.fixture(scope='function')
 def user_data_json(user_data):
@@ -1393,7 +1422,7 @@ class TestDictPersistence(object):
             context.user_data['test1'] = 'test2'
             context.chat_data[3] = 'test4'
             context.bot_data['test1'] = 'test0'
-            context.callback_data['test1'] = 'test0'
+            context.disptacher.callback_data['test1'] = 'test0'
 
         def second(update, context):
             if not context.user_data['test1'] == 'test2':
@@ -1402,7 +1431,7 @@ class TestDictPersistence(object):
                 pytest.fail()
             if not context.bot_data['test1'] == 'test0':
                 pytest.fail()
-            if not context.callback_data['test1'] == 'test0':
+            if not context.dispatcher['test1'] == 'test0':
                 pytest.fail()
 
         h1 = MessageHandler(None, first, pass_user_data=True, pass_chat_data=True)
@@ -1508,3 +1537,25 @@ class TestDictPersistence(object):
         assert ch.conversations == dict_persistence.conversations['name2']
         assert nested_ch.conversations[nested_ch._get_key(update)] == 1
         assert nested_ch.conversations == dict_persistence.conversations['name3']
+
+    def test_with_job(self, job_queue, cdp):
+        def job_callback(context):
+            context.bot_data['test1'] = '456'
+            context.dispatcher.chat_data[123]['test2'] = '789'
+            context.dispatcher.user_data[789]['test3'] = '123'
+            context.dispatcher.callback_data['test1'] = 'test0'
+
+        dict_persistence = DictPersistence()
+        cdp.persistence = dict_persistence
+        job_queue.set_dispatcher(cdp)
+        job_queue.start()
+        job_queue.run_once(job_callback, 0.01)
+        sleep(0.05)
+        bot_data = dict_persistence.get_bot_data()
+        assert bot_data == {'test1': '456'}
+        chat_data = dict_persistence.get_chat_data()
+        assert chat_data[123] == {'test2': '789'}
+        user_data = dict_persistence.get_user_data()
+        assert user_data[789] == {'test3': '123'}
+        callback_data = dict_persistence.get_callback_data()
+        assert callback_data['test1'] == 'test0'
